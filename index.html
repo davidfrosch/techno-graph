@@ -1,173 +1,220 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Techno Artist Collaboration Network</title>
-    <script src="https://cdn.jsdelivr.net/npm/graphology@0.18.0/dist/graphology.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/louvain.js@0.1.0/dist/louvain.min.js"></script>
-    <script src="https://d3js.org/d3.v6.min.js"></script>
-    <style>
-        body { margin: 0; padding: 0; }
-        svg { width: 100vw; height: 100vh; }
-        #controls { position: absolute; top: 20px; left: 20px; background-color: rgba(255, 255, 255, 0.7); padding: 10px; }
-        select { padding: 5px; }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Techno Artist Collaboration Network</title>
+
+  <script src="https://cdn.jsdelivr.net/npm/graphology"></script>
+  <script src="https://cdn.jsdelivr.net/npm/graphology-communities-louvain@0.4.1/with-graphology.min.js"></script>
+  <script src="https://d3js.org/d3.v6.min.js"></script>
+
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: sans-serif;
+    }
+
+    #ui-container {
+      position: sticky;
+      top: 0;
+      background-color: #fff;
+      padding: 10px;
+      display: flex;
+      gap: 10px;
+      z-index: 1000;
+      border-bottom: 1px solid #ccc;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    #ui-container label {
+      font-weight: bold;
+    }
+
+    svg {
+      width: 100vw;
+      height: calc(100vh - 60px);
+    }
+
+    .node {
+      cursor: pointer;
+    }
+
+    .label {
+      font-size: 10px;
+    }
+  </style>
 </head>
 <body>
-    <div id="controls">
-        <label for="algorithm-select">Community Detection Algorithm: </label>
-        <select id="algorithm-select">
-            <option value="louvain">Louvain</option>
-            <option value="girvan-newman">Girvan-Newman</option>
-            <option value="label-propagation">Label Propagation</option>
-        </select>
-    </div>
+  <div id="ui-container">
+    <label for="algorithm-select">Community Detection:</label>
+    <select id="algorithm-select">
+      <option value="none">None</option>
+      <option value="louvain">Louvain</option>
+      <option value="girvan-newman">Girvan-Newman</option>
+      <option value="label-propagation">Label Propagation</option>
+    </select>
 
-    <script>
-        d3.json('techno_graph_data.json').then(function(graphData) {
-            const width = window.innerWidth, height = window.innerHeight;
+    <label for="node-count">Artists to show:</label>
+    <input type="number" id="node-count" value="1000" min="1" />
 
-            const svg = d3.select('body').append('svg')
-                .attr('width', width)
-                .attr('height', height);
+    <label for="search">Search:</label>
+    <input type="text" id="search" placeholder="Artist name..." />
+  </div>
 
-            const link = svg.append('g').selectAll('.link')
-                .data(graphData.links)
-                .enter().append('line')
-                .attr('class', 'link')
-                .attr('stroke-width', 2)
-                .attr('stroke', '#999');
+  <script>
+    d3.json('techno_graph_data.json').then(function(graphData) {
+      const svg = d3.select('body').append('svg');
+      const container = svg.append('g');
 
-            const node = svg.append('g').selectAll('.node')
-                .data(graphData.nodes)
-                .enter().append('circle')
-                .attr('class', 'node')
-                .attr('r', 5)
-                .attr('fill', '#1f77b4')
-                .call(d3.drag().on('start', dragstart).on('drag', dragged).on('end', dragend));
+      const zoom = d3.zoom()
+        .scaleExtent([0.1, 10])
+        .on('zoom', (event) => container.attr('transform', event.transform));
 
-            const label = svg.append('g').selectAll('.label')
-                .data(graphData.nodes)
-                .enter().append('text')
-                .attr('class', 'label')
-                .attr('dx', 10)
-                .attr('dy', 5)
-                .text(d => d.id);
+      svg.call(zoom);
 
-            const simulation = d3.forceSimulation(graphData.nodes)
-                .force('link', d3.forceLink(graphData.links).id(d => d.id).distance(100))
-                .force('charge', d3.forceManyBody().strength(-100))
-                .force('center', d3.forceCenter(width / 2, height / 2));
+      let filteredData = { nodes: [], links: [] };
 
-            simulation
-                .nodes(graphData.nodes)
-                .on('tick', ticked);
+      function filterGraphData(count) {
+        const degreeMap = {};
 
-            simulation.force('link')
-                .links(graphData.links);
-
-            function ticked() {
-                link
-                    .attr('x1', d => d.source.x)
-                    .attr('y1', d => d.source.y)
-                    .attr('x2', d => d.target.x)
-                    .attr('y2', d => d.target.y);
-
-                node
-                    .attr('cx', d => d.x)
-                    .attr('cy', d => d.y);
-
-                label
-                    .attr('x', d => d.x)
-                    .attr('y', d => d.y);
-            }
-
-            function dragstart(event) {
-                if (!event.active) simulation.alphaTarget(0.3).restart();
-                event.subject.fx = event.subject.x;
-                event.subject.fy = event.subject.y;
-            }
-
-            function dragged(event) {
-                event.subject.fx = event.x;
-                event.subject.fy = event.y;
-            }
-
-            function dragend(event) {
-                if (!event.active) simulation.alphaTarget(0);
-                event.subject.fx = null;
-                event.subject.fy = null;
-            }
-
-            // Add event listener to the algorithm selector
-            d3.select("#algorithm-select").on("change", function() {
-                const selectedAlgorithm = this.value;
-                applyCommunityDetection(selectedAlgorithm);
-            });
-
-            // Apply the community detection algorithms
-            function applyCommunityDetection(algorithm) {
-                let communities;
-                switch (algorithm) {
-                    case "louvain":
-                        communities = louvain(graphData);
-                        break;
-                    case "girvan-newman":
-                        communities = girvanNewman(graphData);
-                        break;
-                    case "label-propagation":
-                        communities = labelPropagation(graphData);
-                        break;
-                }
-                // Update node colors based on community
-                node.attr('fill', d => communities[d.id].color);
-            }
-
-            // Louvain algorithm implementation
-            function louvain(graphData) {
-                const graph = new graphology.Graph();
-                graphData.nodes.forEach(node => graph.addNode(node.id));
-                graphData.links.forEach(link => graph.addEdge(link.source, link.target));
-
-                const louvainResults = louvainAlgorithm(graph);
-                return assignColorsToCommunities(louvainResults);
-            }
-
-            // Girvan-Newman algorithm implementation
-            function girvanNewman(graphData) {
-                const graph = new graphology.Graph();
-                graphData.nodes.forEach(node => graph.addNode(node.id));
-                graphData.links.forEach(link => graph.addEdge(link.source, link.target));
-
-                const betweenness = graph.betweenness();
-                const communities = girvanNewmanAlgorithm(graph, betweenness);
-                return assignColorsToCommunities(communities);
-            }
-
-            // Label Propagation (Placeholder)
-            function labelPropagation(graphData) {
-                const graph = new graphology.Graph();
-                graphData.nodes.forEach(node => graph.addNode(node.id));
-                graphData.links.forEach(link => graph.addEdge(link.source, link.target));
-
-                const communities = labelPropagationAlgorithm(graph);
-                return assignColorsToCommunities(communities);
-            }
-
-            // Helper function to assign colors to communities
-            function assignColorsToCommunities(communityData) {
-                const communityColors = d3.scaleOrdinal(d3.schemeCategory10);
-                let communityMap = {};
-                communityData.forEach((community, idx) => {
-                    communityMap[community.node] = { 
-                        community: community.community, 
-                        color: communityColors(community.community)
-                    };
-                });
-                return communityMap;
-            }
+        // Compute node degrees
+        graphData.links.forEach(link => {
+          degreeMap[link.source] = (degreeMap[link.source] || 0) + 1;
+          degreeMap[link.target] = (degreeMap[link.target] || 0) + 1;
         });
-    </script>
+
+        // Filter only connected nodes
+        const connectedNodes = graphData.nodes.filter(n => degreeMap[n.id] >= 1);
+
+        // Shuffle and limit count
+        const selectedNodes = d3.shuffle(connectedNodes).slice(0, count);
+        const selectedNodeIds = new Set(selectedNodes.map(n => n.id));
+
+        // Filter links between selected nodes
+        const selectedLinks = graphData.links.filter(
+          l => selectedNodeIds.has(l.source) && selectedNodeIds.has(l.target)
+        );
+
+        // Final node list = nodes with at least one link
+        const finalNodeIds = new Set();
+        selectedLinks.forEach(link => {
+          finalNodeIds.add(link.source);
+          finalNodeIds.add(link.target);
+        });
+
+        const finalNodes = selectedNodes.filter(n => finalNodeIds.has(n.id));
+
+        return { nodes: finalNodes, links: selectedLinks };
+      }
+
+      function render(count = 1000) {
+        container.selectAll('*').remove();
+        filteredData = filterGraphData(count);
+
+        const simulation = d3.forceSimulation(filteredData.nodes)
+          .force('link', d3.forceLink(filteredData.links).id(d => d.id).distance(100))
+          .force('charge', d3.forceManyBody().strength(-50))
+          .force('center', d3.forceCenter(window.innerWidth / 2, window.innerHeight / 2 - 30))
+          .alphaDecay(0.05);
+
+        const link = container.append('g')
+          .selectAll('.link')
+          .data(filteredData.links)
+          .enter().append('line')
+          .attr('class', 'link')
+          .attr('stroke-width', 0.5)
+          .attr('stroke', '#999');
+
+        const node = container.append('g')
+          .selectAll('.node')
+          .data(filteredData.nodes)
+          .enter().append('circle')
+          .attr('class', 'node')
+          .attr('r', d => d.id.includes("[LABEL]") ? 8 : 5)
+          .attr('fill', d => d.id.includes("[LABEL]") ? 'red' : '#1f77b4')
+          .call(d3.drag()
+            .on('start', dragstarted)
+            .on('drag', dragged)
+            .on('end', dragended));
+
+        const label = container.append('g')
+          .selectAll('.label')
+          .data(filteredData.nodes)
+          .enter().append('text')
+          .attr('class', 'label')
+          .attr('dx', 10)
+          .attr('dy', 5)
+          .text(d => d.id);
+
+        simulation.on('tick', () => {
+          link
+            .attr('x1', d => d.source.x)
+            .attr('y1', d => d.source.y)
+            .attr('x2', d => d.target.x)
+            .attr('y2', d => d.target.y);
+
+          node
+            .attr('cx', d => d.x)
+            .attr('cy', d => d.y);
+
+          label
+            .attr('x', d => d.x)
+            .attr('y', d => d.y);
+        });
+
+        function dragstarted(event) {
+          if (!event.active) simulation.alphaTarget(0.3).restart();
+          event.subject.fx = event.subject.x;
+          event.subject.fy = event.subject.y;
+        }
+
+        function dragged(event) {
+          event.subject.fx = event.x;
+          event.subject.fy = event.y;
+        }
+
+        function dragended(event) {
+          if (!event.active) simulation.alphaTarget(0);
+          event.subject.fx = null;
+          event.subject.fy = null;
+        }
+
+        d3.select("#search").on("input", function () {
+          const term = this.value.toLowerCase();
+          label.style('display', d => d.id.toLowerCase().includes(term) ? 'block' : 'none');
+          node.style('opacity', d => d.id.toLowerCase().includes(term) ? 1 : 0.2);
+        });
+
+        d3.select("#algorithm-select").on("change", function () {
+          const algorithm = this.value;
+          applyCommunityDetection(algorithm);
+        });
+
+        function applyCommunityDetection(algorithm) {
+          const graph = new graphology.Graph();
+          filteredData.nodes.forEach(node => graph.addNode(node.id));
+          filteredData.links.forEach(link => graph.addEdge(link.source, link.target));
+
+          let communities = {};
+          if (algorithm === "louvain") {
+            communities = graphologyCommunities.louvain(graph);
+          }
+
+          const colorScale = d3.scaleOrdinal(d3.schemeCategory10);
+          node.attr('fill', d => communities[d.id] ? colorScale(communities[d.id]) : '#1f77b4');
+        }
+      }
+
+      render(1000);
+
+      d3.select("#node-count").on("change", function () {
+        const val = Math.max(1, +this.value);
+        render(val);
+      });
+    });
+  </script>
 </body>
 </html>
