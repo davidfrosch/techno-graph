@@ -50,11 +50,11 @@
     }
 
     .artist {
-      fill: #0afd0ad8; /* Green for artist nodes */
+      fill: #0afd0a; 
     }
 
     .label-node {
-      fill: #056005; /* Dark green for label nodes */
+      fill: #5d07e5;
     }
 
     #search {
@@ -157,7 +157,7 @@
           .selectAll('.link')
           .data(filteredData.links)
           .enter().append('line')
-          .attr('stroke', '#00FF00') // Green links
+          .attr('stroke', '#057005') // Green links
           .attr('stroke-width', 0.5);
 
         const node = container.append('g')
@@ -165,7 +165,7 @@
           .data(filteredData.nodes)
           .enter().append('circle')
           .attr('class', 'node')
-          .attr('r', d => d.id.toLowerCase() === artistName.toLowerCase() ? 12 : (d.id.includes("[LABEL]") ? 8 : 5))  // Increase radius for searched artist
+          .attr('r', d => d.id.toLowerCase() === artistName.toLowerCase() ? 12 : (d.id.includes("[LABEL]") ? 4 : 5))  // Increase radius for searched artist
           .attr('class', d => d.id.includes("[LABEL]") ? 'label-node' : 'artist') // Assigning class based on node type
           .call(d3.drag()
             .on('start', dragstarted)
