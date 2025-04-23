@@ -5,32 +5,32 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Techno Artist Collaboration Network</title>
 
-  <script src="https://cdn.jsdelivr.net/npm/graphology"></script>
-  <script src="https://cdn.jsdelivr.net/npm/graphology-communities-louvain@0.4.1/with-graphology.min.js"></script>
+  <!-- D3.js and Graphology -->
   <script src="https://d3js.org/d3.v6.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/graphology@0.25.0/dist/graphology.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/graphology-communities-louvain@0.4.1/build/graphology-communities-louvain.min.js"></script>
 
   <style>
     body {
       margin: 0;
-      padding: 0;
-      font-family: sans-serif;
+      font-family: 'Courier New', Courier, monospace; /* Typewriter font */
+      background-color: black; /* Black background */
+      color: #00FF00; /* Green text */
     }
 
     #ui-container {
       position: sticky;
       top: 0;
-      background-color: #fff;
+      background: black;
       padding: 10px;
+      border-bottom: 1px solid #00FF00; /* Green border */
       display: flex;
-      gap: 10px;
-      z-index: 1000;
-      border-bottom: 1px solid #ccc;
-      align-items: center;
       flex-wrap: wrap;
-    }
-
-    #ui-container label {
-      font-weight: bold;
+      align-items: center;
+      gap: 10px;
+      z-index: 10;
+      font-family: 'Courier New', Courier, monospace;
+      color: #00FF00; /* Green text */
     }
 
     svg {
@@ -38,81 +38,114 @@
       height: calc(100vh - 60px);
     }
 
+    .label {
+      font-size: 12px;
+      pointer-events: none;
+      font-family: 'Courier New', Courier, monospace;
+      fill: rgb(219, 219, 219); 
+    }
+
     .node {
       cursor: pointer;
     }
 
-    .label {
-      font-size: 10px;
+    .artist {
+      fill: #0afd0ad8; /* Green for artist nodes */
+    }
+
+    .label-node {
+      fill: #056005; /* Dark green for label nodes */
+    }
+
+    #search {
+      border: 2px solid #00FF00; /* Green border */
+      padding: 5px;
+      font-size: 14px;
+      font-family: 'Courier New', Courier, monospace;
+      color: #00FF00; /* Green text */
+      background-color: black; /* Black background */
+    }
+
+    #search.matched {
+      font-weight: bold;
+      color: #cdf90c; /* Slightly different green for matched text */
+    }
+
+    #layer-count-label {
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 14px;
+      font-weight: normal;
+      color: #00FF00; /* Green text */
+    }
+
+    #layer-count {
+      background-color: black; /* Black background */
+      color: #00FF00; /* Green text */
+      border: 2px solid #00FF00; /* Green border */
+      font-family: 'Courier New', Courier, monospace;
     }
   </style>
 </head>
 <body>
   <div id="ui-container">
-    <label for="algorithm-select">Community Detection:</label>
-    <select id="algorithm-select">
-      <option value="none">None</option>
-      <option value="louvain">Louvain</option>
-      <option value="girvan-newman">Girvan-Newman</option>
-      <option value="label-propagation">Label Propagation</option>
-    </select>
+    <label for="search">Search for Artist:</label>
+    <input type="text" id="search" placeholder="Enter Artist Name..." />
 
-    <label for="node-count">Artists to show:</label>
-    <input type="number" id="node-count" value="1000" min="1" />
-
-    <label for="search">Search:</label>
-    <input type="text" id="search" placeholder="Artist name..." />
+    <label for="layer-count" id="layer-count-label">Add Layers :</label>
+    <input type="number" id="layer-count" value="1" min="1" max="10" />
   </div>
 
   <script>
-    d3.json('techno_graph_data.json').then(function(graphData) {
-      const svg = d3.select('body').append('svg');
-      const container = svg.append('g');
+    function resetGraph() {
+      d3.select('svg').remove();
+    }
 
-      const zoom = d3.zoom()
-        .scaleExtent([0.1, 10])
-        .on('zoom', (event) => container.attr('transform', event.transform));
-
-      svg.call(zoom);
-
-      let filteredData = { nodes: [], links: [] };
-
-      function filterGraphData(count) {
-        const degreeMap = {};
-
-        // Compute node degrees
-        graphData.links.forEach(link => {
-          degreeMap[link.source] = (degreeMap[link.source] || 0) + 1;
-          degreeMap[link.target] = (degreeMap[link.target] || 0) + 1;
+    function loadGraphForArtist(artistName, layers = 1) {
+      resetGraph();
+      d3.json('techno_graph_data.json').then(function(graphData) {
+        const svg = d3.select('body').append('svg');
+        const container = svg.append('g');
+        const zoom = d3.zoom().scaleExtent([0.1, 10]).on('zoom', (event) => {
+          container.attr('transform', event.transform);
         });
+        svg.call(zoom);
 
-        // Filter only connected nodes
-        const connectedNodes = graphData.nodes.filter(n => degreeMap[n.id] >= 1);
+        let filteredData = { nodes: [], links: [] };
 
-        // Shuffle and limit count
-        const selectedNodes = d3.shuffle(connectedNodes).slice(0, count);
-        const selectedNodeIds = new Set(selectedNodes.map(n => n.id));
+        function filterGraphData(artistName, layers) {
+          const nodeMap = new Map();
+          let currentLayer = new Set();
+          let nextLayer = new Set();
 
-        // Filter links between selected nodes
-        const selectedLinks = graphData.links.filter(
-          l => selectedNodeIds.has(l.source) && selectedNodeIds.has(l.target)
-        );
+          const artistNode = graphData.nodes.find(node => node.id.toLowerCase() === artistName.toLowerCase());
+          if (!artistNode) return { nodes: [], links: [] };
 
-        // Final node list = nodes with at least one link
-        const finalNodeIds = new Set();
-        selectedLinks.forEach(link => {
-          finalNodeIds.add(link.source);
-          finalNodeIds.add(link.target);
-        });
+          nodeMap.set(artistNode.id, true);
+          currentLayer.add(artistNode.id);
 
-        const finalNodes = selectedNodes.filter(n => finalNodeIds.has(n.id));
+          for (let i = 0; i < layers; i++) {
+            nextLayer.clear();
+            graphData.links.forEach(link => {
+              if (currentLayer.has(link.source)) nextLayer.add(link.target);
+              if (currentLayer.has(link.target)) nextLayer.add(link.source);
+            });
+            nextLayer.forEach(nodeId => nodeMap.set(nodeId, true));
+            currentLayer = new Set(nextLayer);
+          }
 
-        return { nodes: finalNodes, links: selectedLinks };
-      }
+          filteredData.links = graphData.links.filter(
+            link => nodeMap.has(link.source) && nodeMap.has(link.target)
+          );
 
-      function render(count = 1000) {
-        container.selectAll('*').remove();
-        filteredData = filterGraphData(count);
+          filteredData.nodes = graphData.nodes.filter(
+            node => nodeMap.has(node.id) && node.id !== "Various" && node.id !== "Various Artists" && node.id.length >= 2
+          );
+
+          return filteredData;
+        }
+
+        filteredData = filterGraphData(artistName, layers);
+        if (filteredData.nodes.length === 0) return;
 
         const simulation = d3.forceSimulation(filteredData.nodes)
           .force('link', d3.forceLink(filteredData.links).id(d => d.id).distance(100))
@@ -124,17 +157,16 @@
           .selectAll('.link')
           .data(filteredData.links)
           .enter().append('line')
-          .attr('class', 'link')
-          .attr('stroke-width', 0.5)
-          .attr('stroke', '#999');
+          .attr('stroke', '#00FF00') // Green links
+          .attr('stroke-width', 0.5);
 
         const node = container.append('g')
           .selectAll('.node')
           .data(filteredData.nodes)
           .enter().append('circle')
           .attr('class', 'node')
-          .attr('r', d => d.id.includes("[LABEL]") ? 8 : 5)
-          .attr('fill', d => d.id.includes("[LABEL]") ? 'red' : '#1f77b4')
+          .attr('r', d => d.id.toLowerCase() === artistName.toLowerCase() ? 12 : (d.id.includes("[LABEL]") ? 8 : 5))  // Increase radius for searched artist
+          .attr('class', d => d.id.includes("[LABEL]") ? 'label-node' : 'artist') // Assigning class based on node type
           .call(d3.drag()
             .on('start', dragstarted)
             .on('drag', dragged)
@@ -147,7 +179,7 @@
           .attr('class', 'label')
           .attr('dx', 10)
           .attr('dy', 5)
-          .text(d => d.id);
+          .text(d => d.id.replace("[LABEL]", "")); // Removing "[LABEL]" text for node labels
 
         simulation.on('tick', () => {
           link
@@ -181,39 +213,39 @@
           event.subject.fx = null;
           event.subject.fy = null;
         }
-
-        d3.select("#search").on("input", function () {
-          const term = this.value.toLowerCase();
-          label.style('display', d => d.id.toLowerCase().includes(term) ? 'block' : 'none');
-          node.style('opacity', d => d.id.toLowerCase().includes(term) ? 1 : 0.2);
-        });
-
-        d3.select("#algorithm-select").on("change", function () {
-          const algorithm = this.value;
-          applyCommunityDetection(algorithm);
-        });
-
-        function applyCommunityDetection(algorithm) {
-          const graph = new graphology.Graph();
-          filteredData.nodes.forEach(node => graph.addNode(node.id));
-          filteredData.links.forEach(link => graph.addEdge(link.source, link.target));
-
-          let communities = {};
-          if (algorithm === "louvain") {
-            communities = graphologyCommunities.louvain(graph);
-          }
-
-          const colorScale = d3.scaleOrdinal(d3.schemeCategory10);
-          node.attr('fill', d => communities[d.id] ? colorScale(communities[d.id]) : '#1f77b4');
-        }
-      }
-
-      render(1000);
-
-      d3.select("#node-count").on("change", function () {
-        const val = Math.max(1, +this.value);
-        render(val);
+      }).catch(function(error) {
+        console.error("Error loading the graph data:", error);
       });
+    }
+
+    d3.select("#search").on("input", function () {
+      const artistName = this.value.trim().toLowerCase();
+      const searchInput = d3.select("#search");
+
+      if (artistName) {
+        d3.json('techno_graph_data.json').then(function(graphData) {
+          const artistNode = graphData.nodes.find(node => node.id.toLowerCase() === artistName);
+          if (artistNode) {
+            searchInput.classed('matched', true);
+            const layers = Math.min(+d3.select("#layer-count").property("value"), 5);
+            loadGraphForArtist(artistName, layers);
+          } else {
+            searchInput.classed('matched', false);
+            resetGraph();
+          }
+        });
+      } else {
+        searchInput.classed('matched', false);
+        resetGraph();
+      }
+    });
+
+    d3.select("#layer-count").on("change", function () {
+      const artistName = d3.select("#search").property("value").trim().toLowerCase();
+      const layers = Math.min(+this.value, 5);
+      if (artistName) {
+        loadGraphForArtist(artistName, layers);
+      }
     });
   </script>
 </body>
