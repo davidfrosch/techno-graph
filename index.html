@@ -13,9 +13,9 @@
   <style>
     body {
       margin: 0;
-      font-family: 'Courier New', Courier, monospace; /* Typewriter font */
-      background-color: black; /* Black background */
-      color: #00FF00; /* Green text */
+      font-family: 'Courier New', Courier, monospace;
+      background-color: black;
+      color: #00FF00;
     }
 
     #ui-container {
@@ -23,14 +23,12 @@
       top: 0;
       background: black;
       padding: 10px;
-      border-bottom: 1px solid #00FF00; /* Green border */
+      border-bottom: 1px solid #00FF00;
       display: flex;
       flex-wrap: wrap;
       align-items: center;
       gap: 10px;
       z-index: 10;
-      font-family: 'Courier New', Courier, monospace;
-      color: #00FF00; /* Green text */
     }
 
     svg {
@@ -42,7 +40,7 @@
       font-size: 12px;
       pointer-events: none;
       font-family: 'Courier New', Courier, monospace;
-      fill: rgb(219, 219, 219); 
+      fill: rgb(219, 219, 219);
     }
 
     .node {
@@ -50,39 +48,47 @@
     }
 
     .artist {
-      fill: #0afd0a; 
+      fill: #0afd0a;
     }
 
     .label-node {
       fill: #5d07e5;
     }
 
-    #search {
-      border: 2px solid #00FF00; /* Green border */
+    #search,
+    #layer-count {
+      border: 2px solid #00FF00;
       padding: 5px;
       font-size: 14px;
       font-family: 'Courier New', Courier, monospace;
-      color: #00FF00; /* Green text */
-      background-color: black; /* Black background */
+      background-color: black;
+      color: #00FF00;
     }
 
     #search.matched {
       font-weight: bold;
-      color: #cdf90c; /* Slightly different green for matched text */
+      color: #cdf90c;
     }
 
     #layer-count-label {
       font-family: 'Courier New', Courier, monospace;
       font-size: 14px;
-      font-weight: normal;
-      color: #00FF00; /* Green text */
     }
 
-    #layer-count {
-      background-color: black; /* Black background */
-      color: #00FF00; /* Green text */
-      border: 2px solid #00FF00; /* Green border */
+ 
+    #status-message {
+      opacity: 0;
+      transition: opacity 0.5s ease-in-out;
+      font-size: 14px;
       font-family: 'Courier New', Courier, monospace;
+      color: #ffffff;
+      position: absolute;
+      right: 20px;
+      top: 10px;
+    }
+
+    .hidden {
+      display: none;
     }
   </style>
 </head>
@@ -93,15 +99,50 @@
 
     <label for="layer-count" id="layer-count-label">Add Layers :</label>
     <input type="number" id="layer-count" value="1" min="1" max="10" />
+
+    <!-- Status Message -->
+    <div id="status-message" class="hidden">
+      Artist identified: Scanning network
+    </div>
   </div>
 
   <script>
+    // Animate the status message with changing dots.
+    function showStatusMessage() {
+      const statusMessage = document.getElementById("status-message");
+      const baseText = "Artist identified: Scanning network";
+      let dotCount = 0;
+      statusMessage.textContent = baseText;
+      statusMessage.classList.remove("hidden");
+      statusMessage.style.opacity = 1;
+
+      // Update the dots every 300ms.
+      const intervalId = setInterval(() => {
+        dotCount = (dotCount + 1) % 4;
+        let dots = ".".repeat(dotCount);
+        statusMessage.textContent = baseText + dots;
+      }, 300);
+
+      // After 1 second, clear the interval and fade out.
+      setTimeout(() => {
+        clearInterval(intervalId);
+        statusMessage.style.opacity = 0;
+        setTimeout(() => {
+          statusMessage.classList.add("hidden");
+        }, 500);
+      }, 1000);
+    }
+
+    // Remove any existing graph.
     function resetGraph() {
       d3.select('svg').remove();
     }
 
+    // Loads and filters the graph based on the artist name and layers.
     function loadGraphForArtist(artistName, layers = 1) {
+      showStatusMessage(); // Show status message on artist change.
       resetGraph();
+
       d3.json('techno_graph_data.json').then(function(graphData) {
         const svg = d3.select('body').append('svg');
         const container = svg.append('g');
@@ -133,14 +174,8 @@
             currentLayer = new Set(nextLayer);
           }
 
-          filteredData.links = graphData.links.filter(
-            link => nodeMap.has(link.source) && nodeMap.has(link.target)
-          );
-
-          filteredData.nodes = graphData.nodes.filter(
-            node => nodeMap.has(node.id) && node.id !== "Various" && node.id !== "Various Artists" && node.id.length >= 2
-          );
-
+          filteredData.links = graphData.links.filter(link => nodeMap.has(link.source) && nodeMap.has(link.target));
+          filteredData.nodes = graphData.nodes.filter(node => nodeMap.has(node.id));
           return filteredData;
         }
 
@@ -151,27 +186,35 @@
           .force('link', d3.forceLink(filteredData.links).id(d => d.id).distance(100))
           .force('charge', d3.forceManyBody().strength(-50))
           .force('center', d3.forceCenter(window.innerWidth / 2, window.innerHeight / 2 - 30))
-          .alphaDecay(0.05);
+          .alphaDecay(0.1);
 
+        // Create links.
         const link = container.append('g')
           .selectAll('.link')
           .data(filteredData.links)
           .enter().append('line')
-          .attr('stroke', '#057005') // Green links
+          .attr('stroke', '#057005')
           .attr('stroke-width', 0.5);
 
+        // Create nodes (circles) with different classes and radii.
         const node = container.append('g')
           .selectAll('.node')
           .data(filteredData.nodes)
           .enter().append('circle')
-          .attr('class', 'node')
-          .attr('r', d => d.id.toLowerCase() === artistName.toLowerCase() ? 12 : (d.id.includes("[LABEL]") ? 4 : 5))  // Increase radius for searched artist
-          .attr('class', d => d.id.includes("[LABEL]") ? 'label-node' : 'artist') // Assigning class based on node type
+          .attr('class', d => d.id.includes("[LABEL]") ? 'label-node' : 'artist')
+          .attr('r', d => d.id.toLowerCase() === artistName.toLowerCase() ? 12 : (d.id.includes("[LABEL]") ? 4 : 5))
+          .on('dblclick', (event, d) => {
+            const layers = Math.min(+d3.select("#layer-count").property("value"), 5);
+            d3.select("#search").property("value", d.id);
+            loadGraphForArtist(d.id, layers);
+          })
           .call(d3.drag()
-            .on('start', dragstarted)
-            .on('drag', dragged)
-            .on('end', dragended));
+            .on("start", dragstarted)
+            .on("drag", dragged)
+            .on("end", dragended)
+          );
 
+        // Create labels for nodes.
         const label = container.append('g')
           .selectAll('.label')
           .data(filteredData.nodes)
@@ -179,8 +222,14 @@
           .attr('class', 'label')
           .attr('dx', 10)
           .attr('dy', 5)
-          .text(d => d.id.replace("[LABEL]", "")); // Removing "[LABEL]" text for node labels
+          .text(d => d.id.replace("[LABEL]", ""))
+          .on('dblclick', (event, d) => {
+            const layers = Math.min(+d3.select("#layer-count").property("value"), 5);
+            d3.select("#search").property("value", d.id);
+            loadGraphForArtist(d.id, layers);
+          });
 
+        // Update positions every tick.
         simulation.on('tick', () => {
           link
             .attr('x1', d => d.source.x)
@@ -197,27 +246,27 @@
             .attr('y', d => d.y);
         });
 
-        function dragstarted(event) {
+        // Drag event handlers.
+        function dragstarted(event, d) {
           if (!event.active) simulation.alphaTarget(0.3).restart();
-          event.subject.fx = event.subject.x;
-          event.subject.fy = event.subject.y;
+          d.fx = d.x;
+          d.fy = d.y;
         }
-
-        function dragged(event) {
-          event.subject.fx = event.x;
-          event.subject.fy = event.y;
+        function dragged(event, d) {
+          d.fx = event.x;
+          d.fy = event.y;
         }
-
-        function dragended(event) {
+        function dragended(event, d) {
           if (!event.active) simulation.alphaTarget(0);
-          event.subject.fx = null;
-          event.subject.fy = null;
+          d.fx = null;
+          d.fy = null;
         }
       }).catch(function(error) {
         console.error("Error loading the graph data:", error);
       });
     }
 
+    // Update the graph when the search input changes.
     d3.select("#search").on("input", function () {
       const artistName = this.value.trim().toLowerCase();
       const searchInput = d3.select("#search");
@@ -240,6 +289,7 @@
       }
     });
 
+    // Update the graph based on layer count change.
     d3.select("#layer-count").on("change", function () {
       const artistName = d3.select("#search").property("value").trim().toLowerCase();
       const layers = Math.min(+this.value, 5);
