@@ -75,6 +75,7 @@
       font-size: 14px;
     }
 
+ 
     #status-message {
       opacity: 0;
       transition: opacity 0.5s ease-in-out;
@@ -86,7 +87,7 @@
       top: 10px;
     }
 
-    #status-message.hidden {
+    .hidden {
       display: none;
     }
 
@@ -104,7 +105,7 @@
       color: #00FF00;
       opacity: 0;
       visibility: hidden;
-      transition: opacity 0.3s, visibility 0s 0.3s;
+      transition: opacity 0.1s, visibility 0s 0.1s;
     }
 
     .popup-content {
@@ -171,19 +172,20 @@
     </div>
   </div>
 
-  <!-- Popup -->
-  <div id="help-popup" class="hidden">
-    <div class="popup-content">
-      <span id="close-popup" class="close">&times;</span>
-      <h2 class="matrix-text">Techno Artist Entanglement Space Explorer V 1.0</h2>
-      <p class="matrix-text">This application allows you to explore connections between techno artists and labels. Enter an artist's name in the search bar, and their network will be revealed. You can adjust the layer count to explore deeper connections. Double-click on any node to build a new network based thereupon. <br/> <br/> Built by David L. and his disembodied friends, 2025.</p>
+     <!-- Popup -->
+     <div id="help-popup" class="hidden">
+      <div class="popup-content">
+        <span id="close-popup" class="close">&times;</span>
+        <h2 class="matrix-text">Techno Artist Entanglement Space Explorer V 1.0</h2>
+        <p class="matrix-text">This application allows you to explore connections between techno artists and labels. Enter an artist's name in the search bar, and their network will be revealed. You can adjust the layer count to explore deeper connections. Double-click on any node to build a new network based thereupon. <br/> <br/> Built by David L. and his disembodied friends, 2025.</p>
+      </div>
     </div>
-  </div>
-
-  <!-- Question Mark Icon -->
-  <div id="help-icon">
-    &#63; <!-- The question mark symbol -->
-  </div>
+  
+    <!-- Question Mark Icon -->
+    <div id="help-icon">
+      &#63; <!-- The question mark symbol -->
+    </div>
+  
 
   <script>
     // Animate the status message with changing dots.
@@ -324,8 +326,49 @@
             .attr('x', d => d.x)
             .attr('y', d => d.y);
         });
+
+        // Drag event handlers.
+        function dragstarted(event, d) {
+          if (!event.active) simulation.alphaTarget(0.3).restart();
+          d.fx = d.x;
+          d.fy = d.y;
+        }
+        function dragged(event, d) {
+          d.fx = event.x;
+          d.fy = event.y;
+        }
+        function dragended(event, d) {
+          if (!event.active) simulation.alphaTarget(0);
+          d.fx = null;
+          d.fy = null;
+        }
+      }).catch(function(error) {
+        console.error("Error loading the graph data:", error);
       });
     }
+
+    // Update the graph when the search input changes.
+    d3.select("#search").on("input", function () {
+      const artistName = this.value.trim().toLowerCase();
+      const searchInput = d3.select("#search");
+
+      if (artistName) {
+        d3.json('techno_graph_data.json').then(function(graphData) {
+          const artistNode = graphData.nodes.find(node => node.id.toLowerCase() === artistName);
+          if (artistNode) {
+            searchInput.classed('matched', true);
+            const layers = Math.min(+d3.select("#layer-count").property("value"), 5);
+            loadGraphForArtist(artistName, layers);
+          } else {
+            searchInput.classed('matched', false);
+            resetGraph();
+          }
+        });
+      } else {
+        searchInput.classed('matched', false);
+        resetGraph();
+      }
+    });
 
     window.onload = function () {
       // Check if the user has visited before
@@ -356,7 +399,7 @@
         document.getElementById("help-popup").style.visibility = "hidden";
         setTimeout(() => {
           document.getElementById("help-popup").classList.add("hidden");
-        }, 300);
+        }, 100);
       };
 
       // Close the popup if clicked outside
@@ -367,13 +410,20 @@
           popup.style.visibility = "hidden";
           setTimeout(() => {
             popup.classList.add("hidden");
-          }, 300);
+          }, 100);
         }
-      };
+      };};
 
-      // Example: Load graph for a sample artist.
-      loadGraphForArtist('ArtistName');
-    };
+
+    // Update the graph based on layer count change.
+    d3.select("#layer-count").on("change", function () {
+      const artistName = d3.select("#search").property("value").trim().toLowerCase();
+      const layers = Math.min(+this.value, 5);
+      if (artistName) {
+        loadGraphForArtist(artistName, layers);
+      }
+    });
+
   </script>
 </body>
 </html>
